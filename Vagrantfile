@@ -1,31 +1,66 @@
-Vagrant.configure("2") do |config|
-  config.vbguest.auto_update = false
-  config.vbguest.no_remote = true
-  config.vm.box = "front_app"
-  config.vm.box_url = "https://github.com/tommy-muehle/puppet-vagrant-boxes/releases/download/1.1.0/centos-7.0-x86_64.box"
-  config.vm.network "private_network", ip: "192.168.33.100"
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
 
-  config.vm.provider "virtualbox" do |vb|
-     vb.memory = "1024"
-  end
+require 'json'
+require 'yaml'
 
-  config.vm.provision "shell", inline: <<-SHELL
-    LANG=en_US.UTF-8
-    sudo localectl set-locale LANG=en_US.UTF-8
-    sudo timedatectl set-timezone Asia/Tokyo
-    sudo yum update -y
-    sudo yum install -y net-tools wget git yum-utils zip unzip
-    sudo yum -y groupinstall "Development tools"
-    sudo rpm -Uvh https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
-    sudo rpm -Uvh http://rpms.remirepo.net/enterprise/remi-release-7.rpm
-    sudo yum remove -y httpd
-    sudo yum install -y httpd
-    sudo yum-config-manager --enable remi-php72
-    sudo yum -y install php php-common php-pdo php-mysql php-mbstring php-xml php-xdebug php-zip php72-php
-    curl -sS https://getcomposer.org/installer | php
-    sudo mv composer.phar /usr/local/bin/composer
-    sudo yum install -y nodejs
-    sudo systemctl stop firewalld
-    sudo systemctl is-enabled firewalld
-  SHELL
+VAGRANTFILE_API_VERSION ||= "2"
+confDir = $confDir ||= File.expand_path(File.dirname(__FILE__))
+
+homesteadYamlPath = confDir + "/Homestead.yaml"
+homesteadJsonPath = confDir + "/Homestead.json"
+afterScriptPath = confDir + "/after.sh"
+customizationScriptPath = confDir + "/user-customizations.sh"
+aliasesPath = confDir + "/aliases"
+
+require File.expand_path(File.dirname(__FILE__) + '/scripts/homestead.rb')
+
+Vagrant.require_version '>= 2.1.0'
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+    if File.exist? aliasesPath then
+        config.vm.provision "file", source: aliasesPath, destination: "/tmp/bash_aliases"
+        config.vm.provision "shell" do |s|
+            s.inline = "awk '{ sub(\"\r$\", \"\"); print }' /tmp/bash_aliases > /home/vagrant/.bash_aliases"
+        end
+    end
+
+    if File.exist? homesteadYamlPath then
+        settings = YAML::load(File.read(homesteadYamlPath))
+    elsif File.exist? homesteadJsonPath then
+        settings = JSON::parse(File.read(homesteadJsonPath))
+    else
+        abort "Homestead settings file not found in #{confDir}"
+    end
+
+    Homestead.configure(config, settings)
+
+    if File.exist? afterScriptPath then
+        config.vm.provision "shell", path: afterScriptPath, privileged: false, keep_color: true
+    end
+
+    if File.exist? customizationScriptPath then
+        config.vm.provision "shell", path: customizationScriptPath, privileged: false, keep_color: true
+    end
+
+    if Vagrant.has_plugin?('vagrant-hostsupdater')
+        config.hostsupdater.aliases = settings['sites'].map { |site| site['map'] }
+    elsif Vagrant.has_plugin?('vagrant-hostmanager')
+        config.hostmanager.enabled = true
+        config.hostmanager.manage_host = true
+        config.hostmanager.aliases = settings['sites'].map { |site| site['map'] }
+    end
+    config.vm.provision "shell", inline: <<-SHELL
+	    mkdir -p /home/vagrant/code
+	    mkdir -p /home/vagrant/code/laravel
+	    mkdir -p /home/vagrant/code/node_modules 
+        sudo ln -sf /usr/share/zoneinfo/Japan /etc/localtime
+        sudo locale-gen ja_JP.UTF-8
+        sudo /usr/sbin/update-locale LANG=ja_JP.UTF-8
+        sudo timedatectl set-timezone Asia/Tokyo
+    SHELL
+    config.vm.provision :shell,
+	    inline: "sudo mount --bind /home/vagrant/code/node_modules /home/vagrant/code/laravel/node_modules",
+	    run: "always"
+	
 end
