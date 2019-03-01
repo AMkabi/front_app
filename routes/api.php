@@ -16,3 +16,14 @@ use Illuminate\Http\Request;
 Route::middleware('auth:api')->get('/user', function (Request $request) {
     return $request->user();
 });
+
+Route::group(['middleware' => 'api'], function() {
+    Route::get('getCategorys',  'CategoryController@getCategorys');
+    Route::post('addCategorys',  'CategoryController@addCategorys');
+    Route::post('updateCategorys',  'CategoryController@updateCategorys');
+    
+    Route::get('getRecords',  'RecordController@getRecords');
+    Route::post('getRecordsDetail',  'RecordController@getRecordsDetail');
+    Route::post('getCategoryName',  'RecordController@getCategoryName');
+    Route::post('registRecord',  'RecordController@registRecord');
+});

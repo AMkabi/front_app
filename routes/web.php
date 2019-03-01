@@ -11,6 +11,21 @@
 |
 */
 
-Route::get('/', function () {
-    return view('welcome');
-});
+//Route::get('/', function () {
+//    return view('welcome');
+//});
+
+// ログイン系は、Laravelのデフォルトのを使う
+Auth::routes();
+
+Route::get('/home', 'HomeController@index')->name('home');
+
+
+// 以降、ルーティングはVueで
+Route::get('/{any}', function () {
+    return view('layouts/vue_app');
+})
+->where('any', '.*')->middleware('auth');
+
+
+
